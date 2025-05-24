@@ -1,0 +1,21 @@
+
+python -u run.py \
+  --dataset 'ECL' \
+  --root_path ./dataset/ \
+  --data ECL_270.csv \
+  --enc_len 96 \
+  --label_len 48 \
+  --pred_len 96 \
+  --mpp_update 50 \
+  --sim_num 10 \
+  --threshold 1 \
+  --wave_class 350 \
+  --batch_size 32 \
+  --d_ff 512 \
+  --d_model 256\
+  --d_low 10 \
+  --freq 'h' \
+  --num_epoches 100 \
+  --lradj 'type1' \
+  --learning_rate 1e-4 \
+  --gpu 0

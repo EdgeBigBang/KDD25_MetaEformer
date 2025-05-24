@@ -1,0 +1,21 @@
+
+python -u run.py \
+  --dataset 'Cloud' \
+  --root_path ./dataset/ \
+  --data ECW.npy \
+  --enc_len 48 \
+  --label_len 12 \
+  --pred_len 24 \
+  --mpp_update 50 \
+  --sim_num 130 \
+  --threshold 1.5 \
+  --wave_class 650 \
+  --batch_size 256 \
+  --d_low 10 \
+  --d_ff 2048 \
+  --d_model 1024\
+  --freq 'd' \
+  --num_epoches 80 \
+  --lradj 'type1' \
+  --learning_rate 1e-4 \
+  --gpu 0
