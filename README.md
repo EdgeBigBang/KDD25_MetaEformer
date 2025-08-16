@@ -24,6 +24,25 @@ pip install -r requirements.txt
 
 You can obtain all the datasets in the `./dataset` directory.
 
+**Note**: The `CBW.npy` file is quite large and is stored using Git LFS (Large File Storage). 
+
+#### For new users:
+```bash
+# Install Git LFS
+git lfs install
+
+# Then clone the repository (LFS files will be downloaded automatically)
+git clone <repository-url>
+
+# Or if you already have the repository, pull LFS files
+git lfs pull
+```
+
+#### For existing users:
+If you already have Git LFS installed, `git clone` will automatically download LFS files. If you encounter issues with large files, run:
+```bash
+git lfs pull
+```
 
 ### Training Example
 - In `scripts/ `, we provide training scripts for different scenarios *Cloud/Power/Traffic*
