@@ -66,7 +66,7 @@ class EchoLayer(nn.Module):
         self.patch_seq_len = pattern_len
         self.enc_seq_len = enc_seq_len
         self.device = device
-        self.wave_class = pattern_num
+        self.mpp_size = pattern_num
         self.low_layer = low_layer
         self.sim_num = sim_num
         self.update_count = 0

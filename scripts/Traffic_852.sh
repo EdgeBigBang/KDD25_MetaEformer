@@ -9,7 +9,7 @@ python -u run.py \
   --mpp_update 50 \
   --sim_num 30 \
   --threshold 1 \
-  --wave_class 350 \
+  --mpp_size 350 \
   --batch_size 32 \
   --d_ff 512 \
   --d_model 256\

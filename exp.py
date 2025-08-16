@@ -10,11 +10,8 @@ import os
 from data_provider.data_factory import data_provider, get_cloud, get_cloud_zeroshot
 import numpy as np
 import matplotlib.pyplot as plt
-# import seaborn as sns
 import random
-
 from models.MetaEformer.MetaEformer import MetaEformer
-from models.global_utils import train_test_split
 from utils.tools import adjust_learning_rate, visual
 
 def get_mape(yTrue, yPred, scaler=None):
@@ -58,7 +55,13 @@ def test(args):
     device = acquire_device(args)
     args.device = device
 
-    model = torch.load('saved_model/MetaEformer_pro_best_n_app.pt')
+    checkpoint_path = os.path.join('checkpoints', f'{args.setting}.pt')
+    if not os.path.exists(checkpoint_path):
+        print(f"Model checkpoint not found: {checkpoint_path}")
+        return
+    
+    model = torch.load(checkpoint_path, weights_only=False)
+    print(f"Model loaded from: {checkpoint_path}")
 
     if args.use_multi_gpu and args.use_gpu:
         model = nn.DataParallel(model, device_ids=args.device_ids)
@@ -255,7 +258,15 @@ def train(args):
             if test_loss[-1] < min_loss:
                 best_model = model
                 min_loss = test_loss[-1]
-                torch.save(model, 'saved_model/MetaEformer_best.pt')
+                
+                # 确保checkpoints目录存在
+                checkpoint_dir = 'checkpoints'
+                if not os.path.exists(checkpoint_dir):
+                    os.makedirs(checkpoint_dir)
+                
+                # 使用args.setting作为文件名
+                checkpoint_path = os.path.join(checkpoint_dir, f'{args.setting}.pt')
+                torch.save(model, checkpoint_path)
 
         print(f'epoch {epoch}, train loss: {train_loss[-1]}, test loss: {test_loss[-1]}, '
               f'mse: {test_mse[-1]}, mape: {test_mape[-1]}, mae: {test_mae[-1]}')

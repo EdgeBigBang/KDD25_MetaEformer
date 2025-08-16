@@ -3,9 +3,9 @@ import pandas as pd
 
 
 class MetaPatternPool():
-    def __init__(self, wave_class, wave_len, threshold, device):
-        self.seasonal_pool = torch.empty(wave_class, wave_len, requires_grad=False).to(device)
-        self.wave_len = wave_len
+    def __init__(self, mpp_size, mp_len, threshold, device):
+        self.seasonal_pool = torch.empty(mpp_size, mp_len, requires_grad=False).to(device)
+        self.mp_len = mp_len
         self.threshold = threshold
         self.count = 0
         self.update_count = 0  
@@ -13,13 +13,13 @@ class MetaPatternPool():
         self.s_init = False
         self.t_init = False
 
-        self.step = 0  # 当前步数
-        self.pool_update_step = torch.zeros(wave_class, dtype=torch.long)  # 上次更新步数
+        self.step = 0  
+        self.pool_update_step = torch.zeros(mpp_size, dtype=torch.long)  
 
     def build_pool_seasonal(self, series):
         processed_indices = set()
 
-        patch_series = series.reshape(-1, self.wave_len)
+        patch_series = series.reshape(-1, self.mp_len)
         product_matrix = patch_series.unsqueeze(1) * patch_series.unsqueeze(0)
         product_sum = product_matrix.sum(dim=2)
         product_matrix.view(product_matrix.size(0), -1)[:, ::product_matrix.size(-1) + 1] = 0
@@ -62,7 +62,7 @@ class MetaPatternPool():
 
 
     def update_pool(self, series, alpha=0.1):
-        patch_series = series.reshape(-1, self.wave_len)
+        patch_series = series.reshape(-1, self.mp_len)
         product_matrix = patch_series.unsqueeze(1) * self.seasonal_pool.unsqueeze(0)
         product_sum = product_matrix.sum(dim=2)
 

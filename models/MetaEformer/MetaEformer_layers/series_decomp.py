@@ -22,9 +22,8 @@ class moving_avg(nn.Module):
             front = x[:, 0:1].repeat(1, (self.kernel_size - 1) // 2) 
             end = x[:, -1:,].repeat(1, (self.kernel_size - 1) // 2) 
         x = torch.cat([front, x, end], dim=1) 
-        # 针对二维的情况
         x = torch.unsqueeze(x, dim=1)
-        x = self.avg(x) # [256 * 48]
+        x = self.avg(x) 
         x = torch.squeeze(x, dim=1)
         return x
 

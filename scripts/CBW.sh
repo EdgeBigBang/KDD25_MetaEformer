@@ -9,8 +9,10 @@ python -u run.py \
   --mpp_update 50 \
   --sim_num 70 \
   --threshold 0.15 \
-  --wave_class 650 \
+  --mpp_size 650 \
   --batch_size 256 \
+  --d_ff 2048 \
+  --d_model 1024\
   --freq 'd' \
   --learning_rate 1e-4 \
   --lradj 'TST' \

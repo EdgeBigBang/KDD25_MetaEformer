@@ -12,3 +12,9 @@ venv/
 # VSCode settings (if using)
 .vscode/
 
+checkpoints/
+*.pt
+*.pth
+*.ckpt
+test_results/
+

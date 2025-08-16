@@ -12,7 +12,7 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
 
     # data process
-    parser.add_argument('--task_name', type=str, default='ECL_pic_hight', help='')
+    parser.add_argument('--task_name', type=str, default='MetaEformer', help='task name')
     parser.add_argument('--dataset', type=str, default='ECL', help='Data class for evaluation')
     parser.add_argument('--data', type=str, default='ECL_270.csv', help='Data class for evaluation')
     parser.add_argument('--root_path', type=str, default='./dataset/', help='root path of the data file')
@@ -47,8 +47,8 @@ if __name__ == "__main__":
 
     parser.add_argument("--dim_static", type=int, default=12)
 
-    parser.add_argument("--wave_class", type=int, default=350, help='The size of meta-pattern pool')
-    parser.add_argument("--wave_len", type=int, default=16, help='The length of waves')
+    parser.add_argument("--mpp_size", type=int, default=350, help='The size of meta-pattern pool')
+    parser.add_argument("--mp_len", type=int, default=16, help='The length of meta-patterns')
     parser.add_argument("--low_dim", type=int, default=10)
 
     parser.add_argument("--if_padding", type=bool, default=True)
@@ -67,10 +67,8 @@ if __name__ == "__main__":
     parser.add_argument('--lradj', type=str, default='type3', help='adjust learning rate')
 
     # other settings
-    parser.add_argument("--run_test", "-rt", action="store_true", default=True)
+    parser.add_argument("--run_train", type=int, default=1, help='1 for train, 0 for test')
     parser.add_argument("--save_model", "-sm", type=bool, default=True)
-    parser.add_argument("--load_model", "-lm", type=bool, default=False)
-    parser.add_argument("--show_plot", "-sp", type=bool, default=False)
 
     # GPU
     parser.add_argument('--gpu', type=int, default=0, help='gpu')
@@ -78,7 +76,10 @@ if __name__ == "__main__":
     parser.add_argument('--use_multi_gpu', action='store_true', help='use multiple gpus', default=False)
     parser.add_argument('--num_workers', type=int, default=10, help='data loader num workers')
 
+
     args = parser.parse_args()
+    
+    args.setting = f"task_{args.task_name}_data_{args.dataset}_pred_{args.pred_len}_enc_{args.enc_len}_mpp_{args.mpp_size}_len_{args.mp_len}_update_{args.mpp_update}"
 
     fix_seed = args.random_seed
     random.seed(fix_seed)
@@ -86,7 +87,7 @@ if __name__ == "__main__":
     np.random.seed(fix_seed)
 
 
-    if args.run_test:
+    if args.run_train:
         torch.autograd.set_detect_anomaly(True)
 
         losses, test_losses, mse_l, mae_l = train(args)

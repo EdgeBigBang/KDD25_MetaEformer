@@ -33,7 +33,7 @@ class MetaEformer(nn.Module):
         self.if_padding = configs.if_padding
 
         # MetaPatternpool
-        self.MPP = MPP(configs.wave_class, configs.wave_len, configs.threshold, self.device)
+        self.MPP = MPP(configs.mpp_size, configs.mp_len, configs.threshold, self.device)
         self.decomp = series_decomp(configs.kernel_size)
         self.low_layer = nn.Linear(
             in_features=configs.d_model,
@@ -55,7 +55,7 @@ class MetaEformer(nn.Module):
             ],
 
             [MPPBuilder(self.low_layer) for l in range(configs.e_layers)],
-            [EchoLayer(configs.d_model, configs.wave_class, configs.wave_len, configs.enc_len, self.device, self.low_layer, configs.sim_num) for l in range(configs.e_layers)],
+            [EchoLayer(configs.d_model, configs.mpp_size, configs.mp_len, configs.enc_len, self.device, self.low_layer, configs.sim_num) for l in range(configs.e_layers)],
             norm_layer=torch.nn.LayerNorm(configs.d_model)
         )
 
