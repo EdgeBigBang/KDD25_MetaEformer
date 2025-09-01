@@ -81,48 +81,54 @@ class EchoLayer(nn.Module):
             out_features=half
         )
 
-        self.low_layer_GP = nn.Linear(
+        self.low_layer_MPP = nn.Linear(
             in_features=half,
             out_features=10
         )
 
     def forward(self, src, meta_pattern_pool):
 
-        half = int(self.dim_val / 2)  # 1/2D
-        tmp = src[:, :, half:].flatten(1).clone()  # B * (T*1/2D)
-        patch_tmp = tmp.reshape(-1, int(self.enc_seq_len/self.patch_seq_len), self.patch_seq_len, half)
+        half_dim = int(self.dim_val / 2)  # 1/2D
+        src_half = src[:, :, half_dim:].flatten(1).clone()  # B * (T*1/2D)
+        patches = src_half.reshape(-1, int(self.enc_seq_len/self.patch_seq_len), self.patch_seq_len, half_dim)
 
-        out = torch.empty((src.shape[0], 0, half)).to(self.device)
-        padding_out = torch.empty((src.shape[0], self.enc_seq_len)).to(self.device)
+        patches_low_dim = self.low_layer_MPP(patches)  
+        patches_low_dim_mean = torch.mean(patches_low_dim, dim=-1)  # [batch, num_patches, pattern_length]  
 
-        for i in range(patch_tmp.shape[1]):
-            temp_tmp = patch_tmp[:,i,:,:] # [batch, pattern_length, dim]
+        output_features = torch.empty((src.shape[0], 0, half_dim)).to(self.device)
+        padding_features = torch.empty((src.shape[0], self.enc_seq_len)).to(self.device)
 
-            low_temp_patch = self.low_layer_GP(temp_tmp)
-            low_temp_patch = torch.mean(low_temp_patch, dim=-1)
-            patch_matrix = low_temp_patch.unsqueeze(1) * meta_pattern_pool.unsqueeze(0)
-            patch_sum = patch_matrix.sum(dim=2)
-            topk_values, topk_indices = torch.topk(patch_sum, self.sim_num, dim=1)
+        for patch_idx in range(patches.shape[1]):
+            current_patch = patches[:, patch_idx, :, :]  
+            
+            current_patch_low = patches_low_dim_mean[:, patch_idx, :]  
+            
+            similarity_matrix = current_patch_low.unsqueeze(1) * meta_pattern_pool.unsqueeze(0)
+            similarity_scores = similarity_matrix.sum(dim=2)
+            topk_scores, topk_indices = torch.topk(similarity_scores, self.sim_num, dim=1)
 
-            selected_rows = meta_pattern_pool[topk_indices[0]]  # [selected_rows, pattern_length]
+            selected_patterns = meta_pattern_pool[topk_indices]  
 
-            test = self.fuse_src(temp_tmp.reshape(-1, self.patch_seq_len * half))
-
+            fusion_input = current_patch.reshape(-1, self.patch_seq_len * half_dim)
+            fusion_weights_raw = self.fuse_src(fusion_input)
             self.update_count += 1
+            fusion_weights = torch.softmax(fusion_weights_raw, dim=1)
+     
 
-            key = torch.softmax(test, dim=1)
+            patterns_for_fusion = selected_patterns.transpose(-2, -1).to(self.device)  # [batch, pattern_length, sim_num]
+           
+            fused_features = torch.einsum('bk,bpk->bpk', fusion_weights, patterns_for_fusion)
+            
+            padding_features_current = torch.einsum('bk,bkp->bp', fusion_weights, selected_patterns)
+   
+            padding_features = torch.cat((padding_features, padding_features_current), dim=-1)
 
-            temp = selected_rows.T.to(self.device)
-            # B*P * T*1*P = B*T*P
-            fuse = torch.einsum('bp,tp->btp', key, temp)
-            padding = torch.matmul(key, selected_rows)
-            padding_out = torch.cat((padding_out, padding), dim=-1)
+            recovered_features = self.recover(fused_features)
+            output_features = torch.cat((output_features, recovered_features), dim=1)
 
-            out = torch.cat((out, self.recover(fuse)), dim=1)
+        final_output = torch.cat((src[:, :, :half_dim], output_features), dim=-1)  
 
-        out = torch.cat((src[:, :, :half], out), dim=-1)  # [B*T*D]
-
-        return out, padding_out
+        return final_output, padding_features
 
 
 class MPPBuilder(nn.Module):
@@ -130,49 +136,41 @@ class MPPBuilder(nn.Module):
         super(MPPBuilder, self).__init__()
         self.low_layer = low_layer
 
-    def forward(self, enc_out, gp, decomp):
+    def forward(self, enc_out, mpp, decomp):
         low_enc = self.low_layer(enc_out)  # B*T*D  -> B*T*d
         ser_re = torch.mean(low_enc, dim=-1)  # B*T
 
         season, _ =  decomp(ser_re)
         season_no_grad = season.detach()
 
-        if not gp.s_init:
-            mpp = gp.build_pool_seasonal(season_no_grad)
+        if not mpp.s_init:
+            mpp = mpp.build_pool_seasonal(season_no_grad)
         else:
-            mpp = gp.update_pool(season_no_grad)
+            mpp = mpp.update_pool(season_no_grad)
 
-        return self.low_layer, mpp
+        return mpp
 
 class EchoEncoder(nn.Module):
-    def __init__(self, attn_layers, gp_builders, gp_layers, conv_layers=None, norm_layer=None):
+    def __init__(self, attn_layers, mpp_builders, echo_layers, conv_layers=None, norm_layer=None):
         super(EchoEncoder, self).__init__()
         self.attn_layers = nn.ModuleList(attn_layers)
-        self.gp_builders = nn.ModuleList(gp_builders)
-        self.gp_layers = nn.ModuleList(gp_layers)
-        self.conv_layers = nn.ModuleList(conv_layers) if conv_layers is not None else None
+        self.mpp_builders = nn.ModuleList(mpp_builders)
+        self.echo_layers = nn.ModuleList(echo_layers)
         self.norm = norm_layer
 
     def forward(self, x, MPP, stl, MPP_update_flag, attn_mask=None):
         # x [B, L, D]
         mpp = []
         attns = []
-        if self.conv_layers is not None:
-            for attn_layer, gp_builder, conv_layer in zip(self.attn_layers, self.gp_builders, self.conv_layers):
-                x, attn = attn_layer(x, attn_mask=attn_mask)
-                x = conv_layer(x)
-                attns.append(attn)
-            x, attn = self.attn_layers[-1](x)
-            attns.append(attn)
-        else:
-            for attn_layer, gp_builder, gp_layer in zip(self.attn_layers, self.gp_builders, self.gp_layers):
-                x, attn = attn_layer(x, attn_mask=attn_mask)
-                if MPP_update_flag:
-                    _, mpp = gp_builder(x, MPP, stl)
-                if MPP != None:
-                    x, padding = gp_layer(x, MPP.seasonal_pool)
 
-                attns.append(attn)
+        for attn_layer, mpp_builder, echo_layer in zip(self.attn_layers, self.mpp_builders, self.echo_layers):
+            x, attn = attn_layer(x, attn_mask=attn_mask)
+            if MPP_update_flag:
+                mpp = mpp_builder(x, MPP, stl)
+            if MPP != None:
+                x, padding = echo_layer(x, MPP.seasonal_pool)
+
+            attns.append(attn)
 
         if self.norm is not None:
             x = self.norm(x)
