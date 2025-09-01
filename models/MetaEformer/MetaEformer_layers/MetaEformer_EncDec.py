@@ -61,8 +61,8 @@ class EncoderLayer(nn.Module):
 class EchoLayer(nn.Module):
     def __init__(self, d_model, pattern_num, pattern_len, enc_seq_len, device, low_layer, sim_num):
         super(EchoLayer, self).__init__()
-        self.dim_val = d_model
-        half = int(d_model/2)
+        self.d_model = d_model
+        self.half_dim = int(d_model/2)
         self.patch_seq_len = pattern_len
         self.enc_seq_len = enc_seq_len
         self.device = device
@@ -71,29 +71,29 @@ class EchoLayer(nn.Module):
         self.sim_num = sim_num
         self.update_count = 0
 
-        self.fuse_src = nn.Linear(
-            in_features= self.patch_seq_len * half,
+        self.fusion_layer = nn.Linear(
+            in_features= self.patch_seq_len * self.half_dim,
             out_features=self.sim_num
             )
 
-        self.recover = nn.Linear(
+        self.recovery_layer = nn.Linear(
             in_features=self.sim_num,
-            out_features=half
+            out_features=self.half_dim
         )
 
-        self.low_layer_MPP = nn.Linear(
-            in_features=half,
+        self.dimension_reduction_layer = nn.Linear(
+            in_features=self.half_dim,
             out_features=10
         )
 
     def forward(self, src, meta_pattern_pool):
 
-        half_dim = int(self.dim_val / 2)  # 1/2D
+        half_dim = int(self.d_model / 2)  # 1/2D
         src_half = src[:, :, half_dim:].flatten(1).clone()  # B * (T*1/2D)
         patches = src_half.reshape(-1, int(self.enc_seq_len/self.patch_seq_len), self.patch_seq_len, half_dim)
 
-        patches_low_dim = self.low_layer_MPP(patches)  
-        patches_low_dim_mean = torch.mean(patches_low_dim, dim=-1)  # [batch, num_patches, pattern_length]  
+        patches_low_dim = self.dimension_reduction_layer(patches)  # [batch, num_patches, pattern_length, 10]
+        patches_low_dim_mean = torch.mean(patches_low_dim, dim=-1)  # [batch, num_patches, pattern_length]
 
         output_features = torch.empty((src.shape[0], 0, half_dim)).to(self.device)
         padding_features = torch.empty((src.shape[0], self.enc_seq_len)).to(self.device)
@@ -110,12 +110,11 @@ class EchoLayer(nn.Module):
             selected_patterns = meta_pattern_pool[topk_indices]  
 
             fusion_input = current_patch.reshape(-1, self.patch_seq_len * half_dim)
-            fusion_weights_raw = self.fuse_src(fusion_input)
+            fusion_weights_raw = self.fusion_layer(fusion_input)
             self.update_count += 1
             fusion_weights = torch.softmax(fusion_weights_raw, dim=1)
-     
 
-            patterns_for_fusion = selected_patterns.transpose(-2, -1).to(self.device)  # [batch, pattern_length, sim_num]
+            patterns_for_fusion = selected_patterns.transpose(-2, -1).to(self.device)  
            
             fused_features = torch.einsum('bk,bpk->bpk', fusion_weights, patterns_for_fusion)
             
@@ -123,10 +122,10 @@ class EchoLayer(nn.Module):
    
             padding_features = torch.cat((padding_features, padding_features_current), dim=-1)
 
-            recovered_features = self.recover(fused_features)
+            recovered_features = self.recovery_layer(fused_features)
             output_features = torch.cat((output_features, recovered_features), dim=1)
 
-        final_output = torch.cat((src[:, :, :half_dim], output_features), dim=-1)  
+        final_output = torch.cat((src[:, :, :half_dim], output_features), dim=-1)  # [B*T*D]
 
         return final_output, padding_features
 
